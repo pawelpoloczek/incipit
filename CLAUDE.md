@@ -1,4 +1,4 @@
-# cli-md
+# incipit
 
 A terminal markdown reader built with Go and the Charmbracelet stack.
 
@@ -6,7 +6,7 @@ A terminal markdown reader built with Go and the Charmbracelet stack.
 
 ```bash
 # Build
-go build -o cli-md .
+go build -o incipit .
 
 # Run
 go run . README.md

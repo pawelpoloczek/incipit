@@ -1,11 +1,11 @@
-# cli-md
+# incipit
 
 A terminal markdown reader with consistent rendering for all elements — headings, code blocks, tables, links.
 
 ## Usage
 
 ```
-cli-md [options] <file.md>
+incipit [options] <file.md>
 ```
 
 ### Options
@@ -37,22 +37,22 @@ cli-md [options] <file.md>
 ## Installation
 
 ```bash
-go install github.com/pawelpoloczek/cli-md@latest
+go install github.com/pawelpoloczek/incipit@latest
 ```
 
 Or clone and build:
 
 ```bash
-git clone https://github.com/pawelpoloczek/cli-md
-cd cli-md
+git clone https://github.com/pawelpoloczek/incipit
+cd incipit
 make install
 ```
 
 ## Examples
 
 ```bash
-cli-md README.md
-cli-md --light CHANGELOG.md
-cli-md --no-pager README.md | head -20
-NO_COLOR=1 cli-md README.md
+incipit README.md
+incipit --light CHANGELOG.md
+incipit --no-pager README.md | head -20
+NO_COLOR=1 incipit README.md
 ```

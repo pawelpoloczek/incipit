@@ -35,12 +35,12 @@ func main() {
 	flag.BoolVar(&noPagerFlag, "no-pager", false, "print rendered output without interactive pager")
 	flag.BoolVar(&noColorFlag, "no-color", false, "disable ANSI colors")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: cli-md [--dark|--light] [--no-pager] [--no-color] <file.md>\n")
+		fmt.Fprintf(os.Stderr, "Usage: incipit [--dark|--light] [--no-pager] [--no-color] <file.md>\n")
 	}
 	flag.Parse()
 
 	if darkFlag && lightFlag {
-		fmt.Fprintf(os.Stderr, "cli-md: --dark and --light are mutually exclusive\n")
+		fmt.Fprintf(os.Stderr, "incipit: --dark and --light are mutually exclusive\n")
 		os.Exit(1)
 	}
 
@@ -53,7 +53,7 @@ func main() {
 	filename := args[0]
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cli-md: %s\n", err)
+		fmt.Fprintf(os.Stderr, "incipit: %s\n", err)
 		os.Exit(1)
 	}
 
@@ -70,7 +70,7 @@ func main() {
 	m := newModel(filename, content, style)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "cli-md: %s\n", err)
+		fmt.Fprintf(os.Stderr, "incipit: %s\n", err)
 		os.Exit(1)
 	}
 }

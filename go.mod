@@ -1,4 +1,4 @@
-module github.com/pawelpoloczek/cli-md
+module github.com/pawelpoloczek/incipit
 
 go 1.25.6
 
