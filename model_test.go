@@ -30,6 +30,36 @@ func TestRenderMarkdown_NoTrailingNewline(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdown_H2DarkNoHashPrefix(t *testing.T) {
+	out := stripANSI(renderMarkdown("## Section", "dark", 80))
+	if strings.Contains(out, "## ") {
+		t.Error("H2 dark: expected no '## ' prefix in output")
+	}
+	if !strings.Contains(out, "Section") {
+		t.Error("H2 dark: expected heading text 'Section' to be present")
+	}
+}
+
+func TestRenderMarkdown_H3DarkNoHashPrefix(t *testing.T) {
+	out := stripANSI(renderMarkdown("### Subsection", "dark", 80))
+	if strings.Contains(out, "### ") {
+		t.Error("H3 dark: expected no '### ' prefix in output")
+	}
+	if !strings.Contains(out, "Subsection") {
+		t.Error("H3 dark: expected heading text 'Subsection' to be present")
+	}
+}
+
+func TestRenderMarkdown_H2LightNoHashPrefix(t *testing.T) {
+	out := stripANSI(renderMarkdown("## Section", "light", 80))
+	if strings.Contains(out, "## ") {
+		t.Error("H2 light: expected no '## ' prefix in output")
+	}
+	if !strings.Contains(out, "Section") {
+		t.Error("H2 light: expected heading text 'Section' to be present")
+	}
+}
+
 func TestStripANSI(t *testing.T) {
 	cases := []struct {
 		input string
