@@ -1,7 +1,7 @@
 ---
 title: "refactor: Rename project from cli-md to incipit"
 type: refactor
-status: active
+status: completed
 date: 2026-02-19
 brainstorm: docs/brainstorms/2026-02-19-project-name-brainstorm.md
 ---
