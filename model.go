@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	glamouransi "github.com/charmbracelet/glamour/ansi"
+	glamourstyles "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -23,10 +25,22 @@ func stripANSI(s string) string {
 }
 
 func renderMarkdown(md, style string, width int) string {
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(style),
-		glamour.WithWordWrap(width),
-	)
+	// "dark" and "light" must match the values returned by chooseStyle() in main.go.
+	var styleOpt glamour.TermRendererOption
+	switch style {
+	case "dark":
+		s := glamourstyles.DarkStyleConfig
+		customizeHeaders(&s)
+		styleOpt = glamour.WithStyles(s)
+	case "light":
+		s := glamourstyles.LightStyleConfig
+		customizeHeadersLight(&s)
+		styleOpt = glamour.WithStyles(s)
+	default:
+		styleOpt = glamour.WithStandardStyle(style) // covers "notty" unchanged
+	}
+
+	r, err := glamour.NewTermRenderer(styleOpt, glamour.WithWordWrap(width))
 	if err != nil {
 		return md
 	}
@@ -35,6 +49,56 @@ func renderMarkdown(md, style string, width int) string {
 		return md
 	}
 	return strings.TrimRight(out, "\n")
+}
+
+// customizeHeaders overrides H2-H6 in the given StyleConfig to render with
+// a background color block and no raw markdown prefix (e.g., "## ").
+// H1 is left unchanged — it already renders correctly in Glamour's built-in themes.
+//
+// Cascade note: each Hx's explicit non-empty Prefix (" ") wins in
+// cascadeStylePrimitive() regardless of what the base heading style's Prefix is.
+func customizeHeaders(s *glamouransi.StyleConfig) {
+	sp := func(v string) *string { return &v }
+	bt := true
+	bf := false
+
+	s.H2 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("51"), BackgroundColor: sp("23"), Bold: &bt,
+	}}
+	s.H3 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("48"), BackgroundColor: sp("22"), Bold: &bt,
+	}}
+	s.H4 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("75"), BackgroundColor: sp("17"), Bold: &bt,
+	}}
+	s.H5 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("67"), BackgroundColor: sp("236"), Bold: &bf,
+	}}
+	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("60"), BackgroundColor: sp("235"), Bold: &bf,
+	}}
+}
+
+func customizeHeadersLight(s *glamouransi.StyleConfig) {
+	sp := func(v string) *string { return &v }
+	bt := true
+	bf := false
+
+	s.H2 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("27"), BackgroundColor: sp("195"), Bold: &bt,
+	}}
+	s.H3 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("28"), BackgroundColor: sp("194"), Bold: &bt,
+	}}
+	s.H4 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("19"), BackgroundColor: sp("189"), Bold: &bt,
+	}}
+	s.H5 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("17"), BackgroundColor: sp("153"), Bold: &bf,
+	}}
+	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
+		Prefix: " ", Suffix: " ", Color: sp("59"), BackgroundColor: sp("188"), Bold: &bf,
+	}}
 }
 
 func computeMatches(lines []string, query string) []int {
