@@ -1,18 +1,18 @@
 build:
-	go build -o cli-md .
+	go build -o incipit .
 
 install:
 	go install .
 
 release:
 	mkdir -p dist
-	GOOS=darwin  GOARCH=amd64 go build -o dist/cli-md-darwin-amd64  .
-	GOOS=darwin  GOARCH=arm64 go build -o dist/cli-md-darwin-arm64  .
-	GOOS=linux   GOARCH=amd64 go build -o dist/cli-md-linux-amd64   .
-	GOOS=linux   GOARCH=arm64 go build -o dist/cli-md-linux-arm64   .
+	GOOS=darwin  GOARCH=amd64 go build -o dist/incipit-darwin-amd64  .
+	GOOS=darwin  GOARCH=arm64 go build -o dist/incipit-darwin-arm64  .
+	GOOS=linux   GOARCH=amd64 go build -o dist/incipit-linux-amd64   .
+	GOOS=linux   GOARCH=arm64 go build -o dist/incipit-linux-arm64   .
 
 clean:
-	rm -f cli-md
+	rm -f incipit
 	rm -rf dist/
 
 .PHONY: build install release clean

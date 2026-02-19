@@ -9,7 +9,7 @@ tags: [code-review, agent-native, pipeline, rendering]
 
 ## Problem Statement
 
-`main.go:65` hardcodes `renderMarkdown(content, style, 80)` in the non-pager/non-TTY path. When an agent or CI job pipes output — `cli-md README.md | grep ...` or `cli-md --no-pager README.md > out.txt` — the render width is always 80 columns regardless of what the consumer needs.
+`main.go:65` hardcodes `renderMarkdown(content, style, 80)` in the non-pager/non-TTY path. When an agent or CI job pipes output — `incipit README.md | grep ...` or `incipit --no-pager README.md > out.txt` — the render width is always 80 columns regardless of what the consumer needs.
 
 Glamour's word-wrapper is not reversible. A pipeline consumer receiving 80-column-wrapped paragraphs will see artificial line breaks mid-sentence. For language model ingestion, grep, or text file output, this corrupts semantic structure.
 
@@ -59,7 +59,7 @@ Effort: Small | Risk: Medium
 
 ## Acceptance Criteria
 
-- [ ] `cli-md --no-pager README.md | cat` produces output without artificial line wraps in paragraphs
+- [ ] `incipit --no-pager README.md | cat` produces output without artificial line wraps in paragraphs
 - [ ] When stdout is a TTY, terminal width is used (unchanged behavior in interactive mode)
 - [ ] When stdout is not a TTY, render width is ≥ 4096 (or effectively unlimited)
 - [ ] `go test ./...` passes
