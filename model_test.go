@@ -3,8 +3,6 @@ package main
 import (
 	"strings"
 	"testing"
-
-	glamourstyles "github.com/charmbracelet/glamour/styles"
 )
 
 func TestRenderMarkdown_ReturnsContent(t *testing.T) {
@@ -154,52 +152,154 @@ func TestChooseStyle_NoColorOverridesDark(t *testing.T) {
 	}
 }
 
-func TestAddLanguageLabels_WithLang(t *testing.T) {
-	input := "```go\nfunc main() {}\n```\n"
-	out := addLanguageLabels(input)
-	if !strings.Contains(out, "`go`") {
-		t.Errorf("expected language label `go` in output, got: %q", out)
+// extractCodeBlocks tests
+
+func TestExtractCodeBlocks_WithLang(t *testing.T) {
+	md := "```go\nfunc main() {}\n```\n"
+	prose, blocks := extractCodeBlocks(md)
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(blocks))
 	}
-	if !strings.Contains(out, "```go\n") {
-		t.Errorf("expected fenced block still present in output, got: %q", out)
+	if blocks[0].lang != "go" {
+		t.Errorf("expected lang 'go', got %q", blocks[0].lang)
+	}
+	if !strings.Contains(blocks[0].code, "func main()") {
+		t.Errorf("expected code to contain 'func main()', got %q", blocks[0].code)
+	}
+	if !strings.Contains(prose, "INCIPIT_CODEBLOCK_0") {
+		t.Errorf("expected prose to contain placeholder, got %q", prose)
+	}
+	if strings.Contains(prose, "```") {
+		t.Error("expected prose to not contain fenced block")
 	}
 }
 
-func TestAddLanguageLabels_NoLang(t *testing.T) {
-	input := "```\nsome code\n```\n"
-	out := addLanguageLabels(input)
-	if out != input {
-		t.Errorf("expected unchanged output for fence with no lang, got: %q", out)
+func TestExtractCodeBlocks_NoLang(t *testing.T) {
+	md := "```\nsome code\n```\n"
+	prose, blocks := extractCodeBlocks(md)
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(blocks))
+	}
+	if blocks[0].lang != "" {
+		t.Errorf("expected empty lang, got %q", blocks[0].lang)
+	}
+	if !strings.Contains(prose, "INCIPIT_CODEBLOCK_0") {
+		t.Errorf("expected placeholder in prose, got %q", prose)
 	}
 }
 
-func TestAddLanguageLabels_NoFence(t *testing.T) {
-	input := "Just some plain text.\n"
-	out := addLanguageLabels(input)
-	if out != input {
-		t.Errorf("expected unchanged output for plain text, got: %q", out)
+func TestExtractCodeBlocks_Multiple(t *testing.T) {
+	md := "```go\nfunc a() {}\n```\n\nSome prose.\n\n```python\nprint('hi')\n```\n"
+	prose, blocks := extractCodeBlocks(md)
+	if len(blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(blocks))
+	}
+	if blocks[0].lang != "go" {
+		t.Errorf("block 0: expected lang 'go', got %q", blocks[0].lang)
+	}
+	if blocks[1].lang != "python" {
+		t.Errorf("block 1: expected lang 'python', got %q", blocks[1].lang)
+	}
+	if !strings.Contains(prose, "INCIPIT_CODEBLOCK_0") {
+		t.Error("expected INCIPIT_CODEBLOCK_0 in prose")
+	}
+	if !strings.Contains(prose, "INCIPIT_CODEBLOCK_1") {
+		t.Error("expected INCIPIT_CODEBLOCK_1 in prose")
 	}
 }
 
-func TestCustomizeHeaders_CodeBlockDarkIndentStrip(t *testing.T) {
-	s := glamourstyles.DarkStyleConfig
-	customizeHeaders(&s)
-	if s.CodeBlock.StylePrimitive.BackgroundColor == nil {
-		t.Fatal("expected CodeBlock.StylePrimitive.BackgroundColor to be set for dark theme")
+func TestExtractCodeBlocks_NoBlocks(t *testing.T) {
+	md := "Just plain prose.\n\nAnother paragraph.\n"
+	prose, blocks := extractCodeBlocks(md)
+	if len(blocks) != 0 {
+		t.Errorf("expected 0 blocks, got %d", len(blocks))
 	}
-	if *s.CodeBlock.StylePrimitive.BackgroundColor != "23" {
-		t.Errorf("expected CodeBlock dark bg strip color '23', got %q", *s.CodeBlock.StylePrimitive.BackgroundColor)
+	if prose != md {
+		t.Errorf("expected prose unchanged, got %q", prose)
 	}
 }
 
-func TestCustomizeHeadersLight_CodeBlockLightIndentStrip(t *testing.T) {
-	s := glamourstyles.LightStyleConfig
-	customizeHeadersLight(&s)
-	if s.CodeBlock.StylePrimitive.BackgroundColor == nil {
-		t.Fatal("expected CodeBlock.StylePrimitive.BackgroundColor to be set for light theme")
+// renderCodeBlock tests
+
+func TestRenderCodeBlock_ContainsBorder(t *testing.T) {
+	cb := codeBlock{lang: "go", code: "func main() {}\n"}
+	out := renderCodeBlock(cb, 60, "dark")
+	if !strings.Contains(out, "╭") {
+		t.Error("expected top-left border character ╭")
 	}
-	if *s.CodeBlock.StylePrimitive.BackgroundColor != "195" {
-		t.Errorf("expected CodeBlock light bg strip color '195', got %q", *s.CodeBlock.StylePrimitive.BackgroundColor)
+	if !strings.Contains(out, "╰") {
+		t.Error("expected bottom-left border character ╰")
+	}
+}
+
+func TestRenderCodeBlock_ContainsCode(t *testing.T) {
+	cb := codeBlock{lang: "", code: "hello world\n"}
+	out := stripANSI(renderCodeBlock(cb, 60, "dark"))
+	if !strings.Contains(out, "hello world") {
+		t.Errorf("expected code content in output, got: %q", out)
+	}
+}
+
+func TestRenderCodeBlock_WithLang_TitleInBorder(t *testing.T) {
+	cb := codeBlock{lang: "go", code: "x := 1\n"}
+	out := stripANSI(renderCodeBlock(cb, 60, "dark"))
+	if !strings.Contains(out, "── go ──") {
+		t.Errorf("expected language label in top border, got: %q", out)
+	}
+}
+
+func TestRenderCodeBlock_NoLang_PlainBorder(t *testing.T) {
+	cb := codeBlock{lang: "", code: "x := 1\n"}
+	out := stripANSI(renderCodeBlock(cb, 60, "dark"))
+	// Top border should be plain ╭───...───╮ with no language label
+	if strings.Contains(out, "──  ──") {
+		t.Error("expected no language label in plain border")
+	}
+	firstLine := strings.Split(out, "\n")[0]
+	if !strings.HasPrefix(firstLine, "╭") {
+		t.Errorf("top border should start with ╭, got: %q", firstLine)
+	}
+}
+
+func TestRenderCodeBlock_NottyNoBorderColor(t *testing.T) {
+	cb := codeBlock{lang: "go", code: "x := 1\n"}
+	out := renderCodeBlock(cb, 60, "notty")
+	// notty style should produce no ANSI color codes
+	if out != stripANSI(out) {
+		t.Error("expected no ANSI codes in notty output")
+	}
+	if !strings.Contains(out, "╭") {
+		t.Error("expected border characters even in notty output")
+	}
+}
+
+// injectCodeBlocks tests
+
+func TestInjectCodeBlocks_ReplacesPlaceholder(t *testing.T) {
+	blocks := []codeBlock{{lang: "go", code: "x := 1\n"}}
+	rendered := "Some prose\n\n  INCIPIT_CODEBLOCK_0\n\nMore prose"
+	out := injectCodeBlocks(rendered, blocks, 60, "dark")
+	if strings.Contains(stripANSI(out), "INCIPIT_CODEBLOCK_0") {
+		t.Error("expected placeholder to be replaced")
+	}
+	if !strings.Contains(out, "╭") {
+		t.Error("expected code block border in output")
+	}
+}
+
+// End-to-end tests
+
+func TestRenderMarkdown_CodeBlock_EndToEnd(t *testing.T) {
+	md := "Some text.\n\n```go\nfunc main() {}\n```\n\nMore text."
+	out := renderMarkdown(md, "dark", 80)
+	if out == "" {
+		t.Fatal("expected non-empty output")
+	}
+	if !strings.Contains(out, "╭") {
+		t.Error("expected rounded border ╭ in code block output")
+	}
+	if !strings.Contains(out, "╰") {
+		t.Error("expected rounded border ╰ in code block output")
 	}
 }
 
@@ -208,9 +308,12 @@ func TestRenderMarkdown_CodeBlockDarkBg(t *testing.T) {
 	if out == "" {
 		t.Fatal("expected non-empty output for dark code block")
 	}
-	// The old background was #373737 (R=55,G=55,B=55); verify it is gone.
+	// Should use 256-color index 235 background (not the old #373737)
 	if strings.Contains(out, "55;55;55") {
 		t.Error("dark code block should not use the old #373737 background")
+	}
+	if !strings.Contains(out, "╭") {
+		t.Error("expected border in dark code block output")
 	}
 }
 
@@ -219,8 +322,11 @@ func TestRenderMarkdown_CodeBlockLightBg(t *testing.T) {
 	if out == "" {
 		t.Fatal("expected non-empty output for light code block")
 	}
-	// The light theme previously used the dark #373737 background; verify it is fixed.
+	// Should use 256-color index 254 background (not the old #373737)
 	if strings.Contains(out, "55;55;55") {
 		t.Error("light code block should not use the dark #373737 background")
+	}
+	if !strings.Contains(out, "╭") {
+		t.Error("expected border in light code block output")
 	}
 }

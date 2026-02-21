@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -19,21 +20,163 @@ const (
 )
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-var fencedLang = regexp.MustCompile("(?m)^(```)" + `([a-zA-Z][a-zA-Z0-9_+-]*)` + "\n")
+
+// codeBlockRe matches fenced code blocks. Group 1 = language (optional), group 2 = code content.
+// Flags: m (multiline ^/$) and s (dotall — . matches \n).
+var codeBlockRe = regexp.MustCompile("(?ms)^`{3}([a-zA-Z][a-zA-Z0-9_+-]*)?\n(.*?)^`{3}[^\\S\\r\\n]*$")
 
 func stripANSI(s string) string {
 	return ansiEscape.ReplaceAllString(s, "")
 }
 
-// addLanguageLabels inserts an inline code span label before each fenced
-// code block that declares a language (e.g. ```go → `go` above the block).
-// Blocks with no language specifier (plain ```) are left unchanged.
-func addLanguageLabels(md string) string {
-	return fencedLang.ReplaceAllString(md, "`$2`\n$1$2\n")
+type codeBlock struct {
+	lang string
+	code string
+}
+
+// extractCodeBlocks pulls fenced code blocks out of md, replacing each with a
+// unique placeholder paragraph, and returns the modified prose plus the blocks.
+func extractCodeBlocks(md string) (string, []codeBlock) {
+	var blocks []codeBlock
+	prose := codeBlockRe.ReplaceAllStringFunc(md, func(match string) string {
+		sub := codeBlockRe.FindStringSubmatch(match)
+		lang, code := "", ""
+		if len(sub) > 1 {
+			lang = sub[1]
+		}
+		if len(sub) > 2 {
+			code = sub[2]
+		}
+		placeholder := fmt.Sprintf("INCIPIT_CODEBLOCK_%d", len(blocks))
+		blocks = append(blocks, codeBlock{lang: lang, code: code})
+		return placeholder
+	})
+	return prose, blocks
+}
+
+func chromaStyleName(style string) string {
+	switch style {
+	case "light":
+		return "github"
+	default:
+		return "monokai"
+	}
+}
+
+func syntaxHighlight(code, lang, chromaStyle string) string {
+	var buf strings.Builder
+	_ = quick.Highlight(&buf, code, lang, "terminal256", chromaStyle)
+	return buf.String()
+}
+
+// renderCodeBlock renders a single code block with a rounded border, syntax
+// highlighting, and a full background fill across all content lines.
+func renderCodeBlock(cb codeBlock, width int, style string) string {
+	outerWidth := width
+	innerWidth := outerWidth - 4 // 1 char border + 1 space padding on each side
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+
+	useColor := style != "notty"
+
+	var bgIndex, borderColor string
+	switch style {
+	case "light":
+		bgIndex = "254"
+		borderColor = "27"
+	default: // dark and anything else
+		bgIndex = "235"
+		borderColor = "23"
+	}
+
+	bgOn := fmt.Sprintf("\x1b[48;5;%sm", bgIndex)
+	resetToBg := fmt.Sprintf("\x1b[0;48;5;%sm", bgIndex)
+	reset := "\x1b[0m"
+
+	var bs lipgloss.Style
+	if useColor {
+		bs = lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor))
+	} else {
+		bs = lipgloss.NewStyle()
+	}
+
+	// Top border — language label embedded when present.
+	var top string
+	if cb.lang != "" {
+		dashes := outerWidth - 6 - len(cb.lang)
+		if dashes < 0 {
+			dashes = 0
+		}
+		top = bs.Render("╭── " + cb.lang + " " + strings.Repeat("─", dashes) + "╮")
+	} else {
+		top = bs.Render("╭" + strings.Repeat("─", outerWidth-2) + "╮")
+	}
+	bottom := bs.Render("╰" + strings.Repeat("─", outerWidth-2) + "╯")
+	lbar := bs.Render("│")
+	rbar := bs.Render("│")
+
+	// Blank padding line (top and bottom inside the box).
+	var blank string
+	if useColor {
+		blank = lbar + " " + bgOn + strings.Repeat(" ", innerWidth) + reset + " " + rbar
+	} else {
+		blank = lbar + " " + strings.Repeat(" ", innerWidth) + " " + rbar
+	}
+
+	// Obtain syntax-highlighted (or plain) code lines.
+	var raw string
+	if useColor {
+		raw = syntaxHighlight(cb.code, cb.lang, chromaStyleName(style))
+	} else {
+		raw = cb.code
+	}
+	raw = strings.TrimRight(raw, "\n")
+	codeLines := strings.Split(raw, "\n")
+
+	var out []string
+	out = append(out, top, blank)
+
+	for _, line := range codeLines {
+		visible := stripANSI(line)
+		pad := innerWidth - len([]rune(visible))
+		if pad < 0 {
+			pad = 0
+		}
+		var cl string
+		if useColor {
+			// Replace every reset with reset+background so the bg persists across tokens.
+			colored := strings.ReplaceAll(line, "\x1b[0m", resetToBg)
+			cl = lbar + " " + bgOn + colored + strings.Repeat(" ", pad) + reset + " " + rbar
+		} else {
+			cl = lbar + " " + visible + strings.Repeat(" ", pad) + " " + rbar
+		}
+		out = append(out, cl)
+	}
+
+	out = append(out, blank, bottom)
+	return strings.Join(out, "\n")
+}
+
+// injectCodeBlocks replaces INCIPIT_CODEBLOCK_N placeholder lines in rendered
+// with the fully-rendered code block for each corresponding block.
+func injectCodeBlocks(rendered string, blocks []codeBlock, width int, style string) string {
+	lines := strings.Split(rendered, "\n")
+	for i, line := range lines {
+		plain := stripANSI(line)
+		for j, cb := range blocks {
+			if strings.Contains(plain, fmt.Sprintf("INCIPIT_CODEBLOCK_%d", j)) {
+				lines[i] = renderCodeBlock(cb, width, style)
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func renderMarkdown(md, style string, width int) string {
-	md = addLanguageLabels(md)
+	prose, blocks := extractCodeBlocks(md)
+
 	// "dark" and "light" must match the values returned by chooseStyle() in main.go.
 	var styleOpt glamour.TermRendererOption
 	switch style {
@@ -53,11 +196,13 @@ func renderMarkdown(md, style string, width int) string {
 	if err != nil {
 		return md
 	}
-	out, err := r.Render(md)
+	out, err := r.Render(prose)
 	if err != nil {
 		return md
 	}
-	return strings.TrimRight(out, "\n")
+	out = strings.TrimRight(out, "\n")
+	out = injectCodeBlocks(out, blocks, width, style)
+	return out
 }
 
 // customizeHeaders overrides H2-H6 in the given StyleConfig to render with
@@ -86,14 +231,6 @@ func customizeHeaders(s *glamouransi.StyleConfig) {
 	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
 		Prefix: " ", Suffix: " ", Color: sp("60"), BackgroundColor: sp("235"), Bold: &bf,
 	}}
-
-	s.CodeBlock.StylePrimitive.BackgroundColor = sp("23") // dark teal indent strip
-
-	if s.CodeBlock.Chroma != nil {
-		chromaCopy := *s.CodeBlock.Chroma
-		chromaCopy.Background.BackgroundColor = sp("#1e2030")
-		s.CodeBlock.Chroma = &chromaCopy
-	}
 }
 
 func customizeHeadersLight(s *glamouransi.StyleConfig) {
@@ -116,14 +253,6 @@ func customizeHeadersLight(s *glamouransi.StyleConfig) {
 	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
 		Prefix: " ", Suffix: " ", Color: sp("59"), BackgroundColor: sp("188"), Bold: &bf,
 	}}
-
-	s.CodeBlock.StylePrimitive.BackgroundColor = sp("195") // pale cyan indent strip
-
-	if s.CodeBlock.Chroma != nil {
-		chromaCopy := *s.CodeBlock.Chroma
-		chromaCopy.Background.BackgroundColor = sp("#f6f8fa")
-		s.CodeBlock.Chroma = &chromaCopy
-	}
 }
 
 func computeMatches(lines []string, query string) []int {
