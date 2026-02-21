@@ -151,3 +151,52 @@ func TestChooseStyle_NoColorOverridesDark(t *testing.T) {
 		t.Error("expected notty when both dark and no-color set")
 	}
 }
+
+func TestAddLanguageLabels_WithLang(t *testing.T) {
+	input := "```go\nfunc main() {}\n```\n"
+	out := addLanguageLabels(input)
+	if !strings.Contains(out, "`go`") {
+		t.Errorf("expected language label `go` in output, got: %q", out)
+	}
+	if !strings.Contains(out, "```go\n") {
+		t.Errorf("expected fenced block still present in output, got: %q", out)
+	}
+}
+
+func TestAddLanguageLabels_NoLang(t *testing.T) {
+	input := "```\nsome code\n```\n"
+	out := addLanguageLabels(input)
+	if out != input {
+		t.Errorf("expected unchanged output for fence with no lang, got: %q", out)
+	}
+}
+
+func TestAddLanguageLabels_NoFence(t *testing.T) {
+	input := "Just some plain text.\n"
+	out := addLanguageLabels(input)
+	if out != input {
+		t.Errorf("expected unchanged output for plain text, got: %q", out)
+	}
+}
+
+func TestRenderMarkdown_CodeBlockDarkBg(t *testing.T) {
+	out := renderMarkdown("```go\nfunc main() {}\n```", "dark", 80)
+	if out == "" {
+		t.Fatal("expected non-empty output for dark code block")
+	}
+	// The old background was #373737 (R=55,G=55,B=55); verify it is gone.
+	if strings.Contains(out, "55;55;55") {
+		t.Error("dark code block should not use the old #373737 background")
+	}
+}
+
+func TestRenderMarkdown_CodeBlockLightBg(t *testing.T) {
+	out := renderMarkdown("```go\nfunc main() {}\n```", "light", 80)
+	if out == "" {
+		t.Fatal("expected non-empty output for light code block")
+	}
+	// The light theme previously used the dark #373737 background; verify it is fixed.
+	if strings.Contains(out, "55;55;55") {
+		t.Error("light code block should not use the dark #373737 background")
+	}
+}
