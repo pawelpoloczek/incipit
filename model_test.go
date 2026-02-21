@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	glamourstyles "github.com/charmbracelet/glamour/styles"
 )
 
 func TestRenderMarkdown_ReturnsContent(t *testing.T) {
@@ -176,6 +178,28 @@ func TestAddLanguageLabels_NoFence(t *testing.T) {
 	out := addLanguageLabels(input)
 	if out != input {
 		t.Errorf("expected unchanged output for plain text, got: %q", out)
+	}
+}
+
+func TestCustomizeHeaders_CodeBlockDarkIndentStrip(t *testing.T) {
+	s := glamourstyles.DarkStyleConfig
+	customizeHeaders(&s)
+	if s.CodeBlock.StylePrimitive.BackgroundColor == nil {
+		t.Fatal("expected CodeBlock.StylePrimitive.BackgroundColor to be set for dark theme")
+	}
+	if *s.CodeBlock.StylePrimitive.BackgroundColor != "23" {
+		t.Errorf("expected CodeBlock dark bg strip color '23', got %q", *s.CodeBlock.StylePrimitive.BackgroundColor)
+	}
+}
+
+func TestCustomizeHeadersLight_CodeBlockLightIndentStrip(t *testing.T) {
+	s := glamourstyles.LightStyleConfig
+	customizeHeadersLight(&s)
+	if s.CodeBlock.StylePrimitive.BackgroundColor == nil {
+		t.Fatal("expected CodeBlock.StylePrimitive.BackgroundColor to be set for light theme")
+	}
+	if *s.CodeBlock.StylePrimitive.BackgroundColor != "195" {
+		t.Errorf("expected CodeBlock light bg strip color '195', got %q", *s.CodeBlock.StylePrimitive.BackgroundColor)
 	}
 }
 

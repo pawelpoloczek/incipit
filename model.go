@@ -87,6 +87,8 @@ func customizeHeaders(s *glamouransi.StyleConfig) {
 		Prefix: " ", Suffix: " ", Color: sp("60"), BackgroundColor: sp("235"), Bold: &bf,
 	}}
 
+	s.CodeBlock.StylePrimitive.BackgroundColor = sp("23") // dark teal indent strip
+
 	if s.CodeBlock.Chroma != nil {
 		chromaCopy := *s.CodeBlock.Chroma
 		chromaCopy.Background.BackgroundColor = sp("#1e2030")
@@ -114,6 +116,8 @@ func customizeHeadersLight(s *glamouransi.StyleConfig) {
 	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
 		Prefix: " ", Suffix: " ", Color: sp("59"), BackgroundColor: sp("188"), Bold: &bf,
 	}}
+
+	s.CodeBlock.StylePrimitive.BackgroundColor = sp("195") // pale cyan indent strip
 
 	if s.CodeBlock.Chroma != nil {
 		chromaCopy := *s.CodeBlock.Chroma
