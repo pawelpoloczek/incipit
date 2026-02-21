@@ -19,12 +19,21 @@ const (
 )
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+var fencedLang = regexp.MustCompile("(?m)^(```)" + `([a-zA-Z][a-zA-Z0-9_+-]*)` + "\n")
 
 func stripANSI(s string) string {
 	return ansiEscape.ReplaceAllString(s, "")
 }
 
+// addLanguageLabels inserts an inline code span label before each fenced
+// code block that declares a language (e.g. ```go → `go` above the block).
+// Blocks with no language specifier (plain ```) are left unchanged.
+func addLanguageLabels(md string) string {
+	return fencedLang.ReplaceAllString(md, "`$2`\n$1$2\n")
+}
+
 func renderMarkdown(md, style string, width int) string {
+	md = addLanguageLabels(md)
 	// "dark" and "light" must match the values returned by chooseStyle() in main.go.
 	var styleOpt glamour.TermRendererOption
 	switch style {
@@ -77,6 +86,12 @@ func customizeHeaders(s *glamouransi.StyleConfig) {
 	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
 		Prefix: " ", Suffix: " ", Color: sp("60"), BackgroundColor: sp("235"), Bold: &bf,
 	}}
+
+	if s.CodeBlock.Chroma != nil {
+		chromaCopy := *s.CodeBlock.Chroma
+		chromaCopy.Background.BackgroundColor = sp("#1e2030")
+		s.CodeBlock.Chroma = &chromaCopy
+	}
 }
 
 func customizeHeadersLight(s *glamouransi.StyleConfig) {
@@ -99,6 +114,12 @@ func customizeHeadersLight(s *glamouransi.StyleConfig) {
 	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
 		Prefix: " ", Suffix: " ", Color: sp("59"), BackgroundColor: sp("188"), Bold: &bf,
 	}}
+
+	if s.CodeBlock.Chroma != nil {
+		chromaCopy := *s.CodeBlock.Chroma
+		chromaCopy.Background.BackgroundColor = sp("#f6f8fa")
+		s.CodeBlock.Chroma = &chromaCopy
+	}
 }
 
 func computeMatches(lines []string, query string) []int {

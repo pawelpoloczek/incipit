@@ -6,4 +6,4 @@
 - instruction for installation builded binary, fe. move it to /usr/local/bin ...
 - some fancy name for this project
 - options to set own colors for headers - maybe some configuration file like k9s or something else
-- 
+
