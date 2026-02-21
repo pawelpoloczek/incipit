@@ -1,7 +1,7 @@
 ---
 title: "feat: Code block distinct background and language label"
 type: feat
-status: active
+status: completed
 date: 2026-02-19
 ---
 
@@ -106,14 +106,14 @@ No other files need changes.
 
 ## Acceptance Criteria
 
-- [ ] Dark theme: code block background is visually distinct from the terminal background (not `#373737`)
-- [ ] Light theme: code block background is a light color (not the dark `#373737` from the glamour default)
-- [ ] A fenced code block with a language (`\`\`\`go`) renders a small `go` label above it
-- [ ] A fenced code block without a language (`\`\`\``) renders no label
-- [ ] Inline code (backtick spans) is unaffected by the `addLanguageLabels` transform
-- [ ] `go test ./...` passes
-- [ ] `go vet ./...` passes
-- [ ] New tests:
+- [x] Dark theme: code block background is visually distinct from the terminal background (not `#373737`)
+- [x] Light theme: code block background is a light color (not the dark `#373737` from the glamour default)
+- [x] A fenced code block with a language (`\`\`\`go`) renders a small `go` label above it
+- [x] A fenced code block without a language (`\`\`\``) renders no label
+- [x] Inline code (backtick spans) is unaffected by the `addLanguageLabels` transform
+- [x] `go test ./...` passes
+- [x] `go vet ./...` passes
+- [x] New tests:
   - `TestAddLanguageLabels_WithLang` — input ` ```go\n ` → output contains `` `go` ``
   - `TestAddLanguageLabels_NoLang` — input ` ``` ` → output unchanged
   - `TestAddLanguageLabels_NoFence` — plain text → output unchanged
