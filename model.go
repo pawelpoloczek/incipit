@@ -9,8 +9,6 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
-	glamouransi "github.com/charmbracelet/glamour/ansi"
-	glamourstyles "github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -25,6 +23,12 @@ var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 // Flags: m (multiline ^/$) and s (dotall — . matches \n).
 var codeBlockRe = regexp.MustCompile("(?ms)^`{3}([a-zA-Z][a-zA-Z0-9_+-]*)?\n(.*?)^`{3}[^\\S\\r\\n]*$")
 
+// headerRe matches ATX headings. Group 1 = '#' characters (level), group 2 = heading text.
+var headerRe = regexp.MustCompile(`(?m)^(#{1,6})\s+(.+)$`)
+
+// inlineMarkdownRe strips common inline markdown delimiters from heading text.
+var inlineMarkdownRe = regexp.MustCompile("[*_~`]{1,2}")
+
 func stripANSI(s string) string {
 	return ansiEscape.ReplaceAllString(s, "")
 }
@@ -32,6 +36,11 @@ func stripANSI(s string) string {
 type codeBlock struct {
 	lang string
 	code string
+}
+
+type headerBlock struct {
+	level int
+	text  string
 }
 
 // extractCodeBlocks pulls fenced code blocks out of md, replacing each with a
@@ -174,25 +183,102 @@ func injectCodeBlocks(rendered string, blocks []codeBlock, width int, style stri
 	return strings.Join(lines, "\n")
 }
 
+// extractHeaders pulls ATX headings out of md, replacing each with a unique
+// placeholder, and returns the modified prose plus the extracted headers.
+func extractHeaders(md string) (string, []headerBlock) {
+	var headers []headerBlock
+	prose := headerRe.ReplaceAllStringFunc(md, func(match string) string {
+		sub := headerRe.FindStringSubmatch(match)
+		level := len(sub[1])
+		text := sub[2]
+		placeholder := fmt.Sprintf("INCIPIT_HEADER_%d", len(headers))
+		headers = append(headers, headerBlock{level: level, text: text})
+		return placeholder
+	})
+	return prose, headers
+}
+
+// stripInlineMarkdown removes common inline markdown delimiters (**, *, _, `, ~~)
+// from a heading text string so lipgloss receives clean plain text.
+func stripInlineMarkdown(s string) string {
+	return strings.TrimSpace(inlineMarkdownRe.ReplaceAllString(s, ""))
+}
+
+// headerColors returns the 256-color fg/bg indices and bold flag for a heading
+// level in the given style ("dark", "light", or anything else → dark defaults).
+func headerColors(level int, style string) (fg, bg string, bold bool) {
+	if style == "light" {
+		switch level {
+		case 1:
+			return "0", "105", true
+		case 2:
+			return "27", "195", true
+		case 3:
+			return "28", "194", true
+		case 4:
+			return "19", "189", true
+		case 5:
+			return "17", "153", false
+		default:
+			return "59", "188", false
+		}
+	}
+	switch level {
+	case 1:
+		return "15", "57", true
+	case 2:
+		return "51", "23", true
+	case 3:
+		return "48", "22", true
+	case 4:
+		return "75", "17", true
+	case 5:
+		return "67", "236", false
+	default:
+		return "60", "235", false
+	}
+}
+
+// renderHeader renders a single heading as a pill-shaped lipgloss string.
+// For "notty" style it returns plain text with no ANSI codes.
+func renderHeader(h headerBlock, style string) string {
+	text := stripInlineMarkdown(h.text)
+	if style == "notty" {
+		return text
+	}
+	fg, bg, bold := headerColors(h.level, style)
+	s := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(fg)).
+		Background(lipgloss.Color(bg)).
+		Padding(0, 2).
+		Bold(bold)
+	return s.Render(text)
+}
+
+// injectHeaders replaces INCIPIT_HEADER_N placeholder lines in rendered with
+// the pill-rendered heading for each corresponding header.
+func injectHeaders(rendered string, headers []headerBlock, style string) string {
+	lines := strings.Split(rendered, "\n")
+	for i, line := range lines {
+		plain := stripANSI(line)
+		for j, h := range headers {
+			if strings.Contains(plain, fmt.Sprintf("INCIPIT_HEADER_%d", j)) {
+				lines[i] = renderHeader(h, style)
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func renderMarkdown(md, style string, width int) string {
 	prose, blocks := extractCodeBlocks(md)
+	prose, headers := extractHeaders(prose)
 
-	// "dark" and "light" must match the values returned by chooseStyle() in main.go.
-	var styleOpt glamour.TermRendererOption
-	switch style {
-	case "dark":
-		s := glamourstyles.DarkStyleConfig
-		customizeHeaders(&s)
-		styleOpt = glamour.WithStyles(s)
-	case "light":
-		s := glamourstyles.LightStyleConfig
-		customizeHeadersLight(&s)
-		styleOpt = glamour.WithStyles(s)
-	default:
-		styleOpt = glamour.WithStandardStyle(style) // covers "notty" unchanged
-	}
-
-	r, err := glamour.NewTermRenderer(styleOpt, glamour.WithWordWrap(width))
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(style),
+		glamour.WithWordWrap(width),
+	)
 	if err != nil {
 		return md
 	}
@@ -202,58 +288,10 @@ func renderMarkdown(md, style string, width int) string {
 	}
 	out = strings.TrimRight(out, "\n")
 	out = injectCodeBlocks(out, blocks, width, style)
+	out = injectHeaders(out, headers, style)
 	return out
 }
 
-// customizeHeaders overrides H2-H6 in the given StyleConfig to render with
-// a background color block and no raw markdown prefix (e.g., "## ").
-// H1 is left unchanged — it already renders correctly in Glamour's built-in themes.
-//
-// Cascade note: each Hx's explicit non-empty Prefix (" ") wins in
-// cascadeStylePrimitive() regardless of what the base heading style's Prefix is.
-func customizeHeaders(s *glamouransi.StyleConfig) {
-	sp := func(v string) *string { return &v }
-	bt := true
-	bf := false
-
-	s.H2 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("51"), BackgroundColor: sp("23"), Bold: &bt,
-	}}
-	s.H3 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("48"), BackgroundColor: sp("22"), Bold: &bt,
-	}}
-	s.H4 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("75"), BackgroundColor: sp("17"), Bold: &bt,
-	}}
-	s.H5 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("67"), BackgroundColor: sp("236"), Bold: &bf,
-	}}
-	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("60"), BackgroundColor: sp("235"), Bold: &bf,
-	}}
-}
-
-func customizeHeadersLight(s *glamouransi.StyleConfig) {
-	sp := func(v string) *string { return &v }
-	bt := true
-	bf := false
-
-	s.H2 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("27"), BackgroundColor: sp("195"), Bold: &bt,
-	}}
-	s.H3 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("28"), BackgroundColor: sp("194"), Bold: &bt,
-	}}
-	s.H4 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("19"), BackgroundColor: sp("189"), Bold: &bt,
-	}}
-	s.H5 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("17"), BackgroundColor: sp("153"), Bold: &bf,
-	}}
-	s.H6 = glamouransi.StyleBlock{StylePrimitive: glamouransi.StylePrimitive{
-		Prefix: " ", Suffix: " ", Color: sp("59"), BackgroundColor: sp("188"), Bold: &bf,
-	}}
-}
 
 func computeMatches(lines []string, query string) []int {
 	lower := strings.ToLower(query)
