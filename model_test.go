@@ -152,6 +152,132 @@ func TestChooseStyle_NoColorOverridesDark(t *testing.T) {
 	}
 }
 
+// extractHeaders tests
+
+func TestExtractHeaders_SingleH2(t *testing.T) {
+	md := "## Section\n\nSome prose."
+	prose, headers := extractHeaders(md)
+	if len(headers) != 1 {
+		t.Fatalf("expected 1 header, got %d", len(headers))
+	}
+	if headers[0].level != 2 {
+		t.Errorf("expected level 2, got %d", headers[0].level)
+	}
+	if headers[0].text != "Section" {
+		t.Errorf("expected text 'Section', got %q", headers[0].text)
+	}
+	if !strings.Contains(prose, "INCIPIT_HEADER_0") {
+		t.Errorf("expected placeholder in prose, got %q", prose)
+	}
+	if strings.Contains(prose, "## ") {
+		t.Error("expected ## to be removed from prose")
+	}
+}
+
+func TestExtractHeaders_MultipleLevelsReturnsCorrectOrder(t *testing.T) {
+	md := "# Title\n\n## Section\n\n### Sub\n"
+	_, headers := extractHeaders(md)
+	if len(headers) != 3 {
+		t.Fatalf("expected 3 headers, got %d", len(headers))
+	}
+	if headers[0].level != 1 || headers[1].level != 2 || headers[2].level != 3 {
+		t.Errorf("unexpected levels: %v", []int{headers[0].level, headers[1].level, headers[2].level})
+	}
+}
+
+func TestExtractHeaders_NoHeaders(t *testing.T) {
+	md := "Just plain prose.\n\nAnother paragraph.\n"
+	prose, headers := extractHeaders(md)
+	if len(headers) != 0 {
+		t.Errorf("expected 0 headers, got %d", len(headers))
+	}
+	if prose != md {
+		t.Errorf("expected prose unchanged, got %q", prose)
+	}
+}
+
+func TestExtractHeaders_WithInlineMarkdown(t *testing.T) {
+	md := "## **Bold** Title\n"
+	_, headers := extractHeaders(md)
+	if len(headers) != 1 {
+		t.Fatalf("expected 1 header, got %d", len(headers))
+	}
+	if headers[0].text != "**Bold** Title" {
+		t.Errorf("expected raw text preserved, got %q", headers[0].text)
+	}
+}
+
+// stripInlineMarkdown tests
+
+func TestStripInlineMarkdown_Bold(t *testing.T) {
+	got := stripInlineMarkdown("**Bold** Title")
+	if strings.Contains(got, "*") {
+		t.Errorf("expected asterisks removed, got %q", got)
+	}
+	if !strings.Contains(got, "Bold") {
+		t.Errorf("expected 'Bold' preserved, got %q", got)
+	}
+}
+
+func TestStripInlineMarkdown_InlineCode(t *testing.T) {
+	got := stripInlineMarkdown("`code` here")
+	if strings.Contains(got, "`") {
+		t.Errorf("expected backtick removed, got %q", got)
+	}
+	if !strings.Contains(got, "code") {
+		t.Errorf("expected 'code' preserved, got %q", got)
+	}
+}
+
+// renderHeader tests
+
+func TestRenderHeader_DarkH2_PillShape(t *testing.T) {
+	h := headerBlock{level: 2, text: "Section"}
+	out := renderHeader(h, "dark")
+	plain := stripANSI(out)
+	if !strings.Contains(plain, "Section") {
+		t.Errorf("expected 'Section' in rendered header, got %q", plain)
+	}
+	// Pill has 2 spaces padding on each side
+	if !strings.Contains(plain, "  Section  ") {
+		t.Errorf("expected 2-space padding around text, got %q", plain)
+	}
+}
+
+func TestRenderHeader_LightH1_PillShape(t *testing.T) {
+	h := headerBlock{level: 1, text: "Title"}
+	out := renderHeader(h, "light")
+	plain := stripANSI(out)
+	if !strings.Contains(plain, "  Title  ") {
+		t.Errorf("expected 2-space padding around text, got %q", plain)
+	}
+}
+
+func TestRenderHeader_NottyPlainText(t *testing.T) {
+	h := headerBlock{level: 2, text: "Section"}
+	out := renderHeader(h, "notty")
+	if out != stripANSI(out) {
+		t.Error("expected no ANSI codes in notty header output")
+	}
+	if out != "Section" {
+		t.Errorf("expected plain 'Section', got %q", out)
+	}
+}
+
+// injectHeaders tests
+
+func TestInjectHeaders_ReplacesPlaceholder(t *testing.T) {
+	headers := []headerBlock{{level: 2, text: "Section"}}
+	rendered := "Some prose\n\n  INCIPIT_HEADER_0\n\nMore prose"
+	out := injectHeaders(rendered, headers, "dark")
+	if strings.Contains(stripANSI(out), "INCIPIT_HEADER_0") {
+		t.Error("expected placeholder to be replaced")
+	}
+	if !strings.Contains(stripANSI(out), "Section") {
+		t.Error("expected header text in output")
+	}
+}
+
 // extractCodeBlocks tests
 
 func TestExtractCodeBlocks_WithLang(t *testing.T) {
@@ -328,5 +454,29 @@ func TestRenderMarkdown_CodeBlockLightBg(t *testing.T) {
 	}
 	if !strings.Contains(out, "╭") {
 		t.Error("expected border in light code block output")
+	}
+}
+
+// Header integration tests
+
+func TestRenderMarkdown_HeaderH1DarkPill(t *testing.T) {
+	out := renderMarkdown("# Title", "dark", 80)
+	plain := stripANSI(out)
+	if !strings.Contains(plain, "  Title  ") {
+		t.Errorf("H1 dark: expected pill-padded 'Title', got %q", plain)
+	}
+	if strings.Contains(plain, "# ") {
+		t.Error("H1 dark: expected no '# ' prefix in output")
+	}
+}
+
+func TestRenderMarkdown_HeaderH3LightPill(t *testing.T) {
+	out := renderMarkdown("### Subsection", "light", 80)
+	plain := stripANSI(out)
+	if !strings.Contains(plain, "  Subsection  ") {
+		t.Errorf("H3 light: expected pill-padded 'Subsection', got %q", plain)
+	}
+	if strings.Contains(plain, "### ") {
+		t.Error("H3 light: expected no '### ' prefix in output")
 	}
 }
